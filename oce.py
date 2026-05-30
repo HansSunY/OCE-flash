@@ -10,7 +10,54 @@ from diffusers import DiffusionPipeline
 from safetensors.torch import load_file
 import torch
 
+def build_erase_subspace(W0, erase_embs,eps=1e-8):
+    V = []
+    for K in erase_embs:
+        v = W0 @ K
+        v = v / (v.norm() + eps)
+        V.append(v)
+    E = torch.stack(V, dim=1)
+    E_orth, _ = torch.linalg.qr(E, mode="reduced")
+    return E_orth
 
+def build_guide_subspace(W0, guide_embs, eps=1e-8):
+    G = []
+    for g in guide_embs:
+        v = W0 @ g
+        v = v / (v.norm() + eps)
+        G.append(v)
+    G = torch.stack(G, dim=1)
+    G_orth, _ = torch.linalg.qr(G, mode="reduced")
+    return G_orth
+
+def build_preserve_subspace(W0, preserve_embs, eps=1e-8):
+    V = []
+    for Kp in preserve_embs:
+        v = W0 @ Kp
+        v = v / (v.norm() + eps)
+        V.append(v)
+    P = torch.stack(V, dim=1)
+    P_orth, _ = torch.linalg.qr(P, mode="reduced")
+    return P_orth
+
+def align_guides_with_edits(edit_concepts, guide_concepts, seed=None):
+    if seed is not None:
+        random.seed(seed)
+
+    n_edit = len(edit_concepts)
+    n_guide = len(guide_concepts)
+
+    if n_guide == 0:
+        raise ValueError("no guide_concepts")
+
+    if n_guide < n_edit:
+        extra = random.choices(guide_concepts, k=n_edit - n_guide)
+        guide_concepts = guide_concepts + extra
+    elif n_guide > n_edit:
+        guide_concepts = guide_concepts[:n_edit]
+
+    return guide_concepts
+  
 def Orthogonal_Erase(pipe, edit_concepts, guide_concepts, preserve_concepts,
                         erase_scale, preserve_scale, preserve_scale_2,
                         lamb, save_dir, exp_name):
